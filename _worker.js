@@ -285,6 +285,9 @@ export default {
                 } else if (new RegExp('/pyip=', 'i').test(url.pathname)) {
                     proxyIP = url.pathname.toLowerCase().split('/pyip=')[1];
                     enableSocks = false;
+                } else if (new RegExp('/ip=', 'i').test(url.pathname)) {
+                    proxyIP = url.pathname.toLowerCase().split('/ip=')[1];
+                    enableSocks = false;
                 }
 
                 return await 特洛伊OverWSHandler(request);
@@ -478,15 +481,7 @@ async function handleTCPOutBound(remoteSocket, addressRemote, portRemote, rawCli
                 if (enableSocks) {
                     tcpSocket2 = enableHttp ? await httpConnect(address, port) : await socks5Connect(address, port);
                 } else {
-                    let 反代IP地址 = proxyIP, 反代IP端口 = 443;
-                    if (proxyIP.includes(']:')) {
-                        反代IP端口 = parseInt(proxyIP.split(']:')[1]) || 反代IP端口;
-                        反代IP地址 = proxyIP.split(']:')[0] + "]" || 反代IP地址;
-                    } else if (proxyIP.split(':').length === 2) {
-                        反代IP端口 = parseInt(proxyIP.split(':')[1]) || 反代IP端口;
-                        反代IP地址 = proxyIP.split(':')[0] || 反代IP地址;
-                    }
-                    if (proxyIP.toLowerCase().includes('.tp')) 反代IP端口 = parseInt(proxyIP.toLowerCase().split('.tp')[1].split('.')[0]) || 反代IP端口;
+                    const [反代IP地址, 反代IP端口] = await 解析地址端口(proxyIP);
                     tcpSocket2 = connect({ hostname: 反代IP地址, port: 反代IP端口 });
                 }
             }
@@ -5397,4 +5392,44 @@ function config_Html(token = "test", proxyhost = "") {
 </html>`;
 
     return html;
+}
+
+async function 解析地址端口(proxyIP) {
+    proxyIP = proxyIP.toLowerCase();
+    if (proxyIP.includes('.william')) {
+        const williamResult = await (async function 解析William域名(william) {
+            try {
+                const response = await fetch(`https://1.1.1.1/dns-query?name=${william}&type=TXT`, { headers: { 'Accept': 'application/dns-json' } });
+                if (!response.ok) return null;
+                const data = await response.json();
+                const txtRecords = (data.Answer || []).filter(record => record.type === 16).map(record => record.data);
+                if (txtRecords.length === 0) return null;
+                let txtData = txtRecords[0];
+                if (txtData.startsWith('"') && txtData.endsWith('"')) txtData = txtData.slice(1, -1);
+                const prefixes = txtData.replace(/\\010/g, ',').replace(/\n/g, ',').split(',').map(s => s.trim()).filter(Boolean);
+                if (prefixes.length === 0) return null;
+                return prefixes[Math.floor(Math.random() * prefixes.length)];
+            } catch (error) {
+                console.error('解析ProxyIP失败:', error);
+                return null;
+            }
+        })(proxyIP);
+        proxyIP = williamResult || proxyIP;
+    }
+    let 地址 = proxyIP, 端口 = 443;
+    if (proxyIP.includes('.tp')) {
+        const tpMatch = proxyIP.match(/\.tp(\d+)/);
+        if (tpMatch) 端口 = parseInt(tpMatch[1], 10);
+        return [地址, 端口];
+    }
+    if (proxyIP.includes(']:')) {
+        const parts = proxyIP.split(']:');
+        地址 = parts[0] + ']';
+        端口 = parseInt(parts[1], 10) || 端口;
+    } else if (proxyIP.includes(':') && !proxyIP.startsWith('[')) {
+        const colonIndex = proxyIP.lastIndexOf(':');
+        地址 = proxyIP.slice(0, colonIndex);
+        端口 = parseInt(proxyIP.slice(colonIndex + 1), 10) || 端口;
+    }
+    return [地址, 端口];
 }
